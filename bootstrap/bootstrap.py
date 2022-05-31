@@ -170,40 +170,48 @@ def run_subprocess(cmd, *args, **kwargs):
         logger.debug(proc.stdout.decode())
 
 
+def get_os_release_variable(key):
+    """
+    Return value for key from /etc/os-release
+
+    /etc/os-release is a bash file, so should use bash to parse it.
+
+    Returns empty string if key is not found.
+    """
+    return (
+        subprocess.check_output(
+            [
+                "/bin/bash",
+                "-c",
+                "source /etc/os-release && echo ${{{key}}}".format(key=key),
+            ]
+        )
+            .decode()
+            .strip()
+    )
+
+
 def ensure_host_system_can_install_tljh():
     """
     Check if TLJH is installable in current host system and exit with a clear
     error message otherwise.
     """
 
-    def get_os_release_variable(key):
-        """
-        Return value for key from /etc/os-release
-
-        /etc/os-release is a bash file, so should use bash to parse it.
-
-        Returns empty string if key is not found.
-        """
-        return (
-            subprocess.check_output(
-                [
-                    "/bin/bash",
-                    "-c",
-                    "source /etc/os-release && echo ${{{key}}}".format(key=key),
-                ]
-            )
-            .decode()
-            .strip()
-        )
-
     # Require Ubuntu 18.04+
     distro = get_os_release_variable("ID")
     version = float(get_os_release_variable("VERSION_ID"))
-    if distro != "ubuntu":
-        print("The Littlest JupyterHub currently supports Ubuntu Linux only")
-        sys.exit(1)
-    elif float(version) < 18.04:
-        print("The Littlest JupyterHub requires Ubuntu 18.04 or higher")
+    if distro == "ubuntu":
+        # print("The Littlest JupyterHub currently supports Ubuntu Linux only")
+        # sys.exit(1)
+        if float(version) < 18.04:
+            print("The Littlest JupyterHub requires Ubuntu 18.04 or higher")
+            sys.exit(1)
+    elif distro == "centos":
+        if float(version) != 7.0:
+            print("The Littlest JupyterHub requires Centos 7")
+            sys.exit(1)
+    else:
+        print("The Littlest JupyterHub currently not supports your distro: {} - {}".format(distro, version))
         sys.exit(1)
 
     # Require Python 3.6+
@@ -212,7 +220,7 @@ def ensure_host_system_can_install_tljh():
         sys.exit(1)
 
     # Require systemd (systemctl is a part of systemd)
-    if not shutil.which("systemd") or not shutil.which("systemctl"):
+    if not shutil.which("systemctl"):
         print("Systemd is required to run TLJH")
         # Provide additional information about running in docker containers
         if os.path.exists("/.dockerenv"):
@@ -260,6 +268,8 @@ def main():
     a web site served locally on port 80.
     """
     ensure_host_system_can_install_tljh()
+
+    distro = get_os_release_variable("ID")
 
     # Various related constants
     install_prefix = os.environ.get("TLJH_INSTALL_PREFIX", "/opt/tljh")
@@ -338,27 +348,49 @@ def main():
         # In Ubuntu 21.10 DEBIAN_FRONTEND has found to be needed to avoid
         # getting stuck on an input prompt during apt-get install.
         #
-        apt_get_adjusted_env = os.environ.copy()
-        apt_get_adjusted_env["DEBIAN_FRONTEND"] = "noninteractive"
-        run_subprocess(["apt-get", "update"])
-        run_subprocess(
-            ["apt-get", "install", "--yes", "software-properties-common"],
-            env=apt_get_adjusted_env,
-        )
-        run_subprocess(["add-apt-repository", "universe", "--yes"])
-        run_subprocess(["apt-get", "update"])
-        run_subprocess(
-            [
-                "apt-get",
-                "install",
-                "--yes",
-                "python3",
-                "python3-venv",
-                "python3-pip",
-                "git",
-            ],
-            env=apt_get_adjusted_env,
-        )
+        if distro == "ubuntu":
+            apt_get_adjusted_env = os.environ.copy()
+            apt_get_adjusted_env["DEBIAN_FRONTEND"] = "noninteractive"
+            run_subprocess(["apt-get", "update"])
+            run_subprocess(
+                ["apt-get", "install", "--yes", "software-properties-common"],
+                env=apt_get_adjusted_env,
+            )
+            run_subprocess(["add-apt-repository", "universe", "--yes"])
+            run_subprocess(["apt-get", "update"])
+            run_subprocess(
+                [
+                    "apt-get",
+                    "install",
+                    "--yes",
+                    "python3",
+                    "python3-venv",
+                    "python3-pip",
+                    "git",
+                ],
+                env=apt_get_adjusted_env,
+            )
+        elif distro == "centos":
+            # yum_adjusted_env = os.environ.copy()
+            # yum_adjusted_env["CENTOS_FRONTEND"] = "noninteractive"
+            run_subprocess(["yum", "update"])
+            # run_subprocess(
+            #     ["yum", "install", "-y", "software-properties-common"],
+            #     # env=yum_adjusted_env,
+            # )
+            # run_subprocess(["add-apt-repository", "universe", "--yes"])
+            # run_subprocess(["apt-get", "update"])
+            run_subprocess(
+                [
+                    "yum",
+                    "install",
+                    "-y",
+                    "python3",
+                    "python3-venv",
+                    "python3-pip",
+                    "git",
+                ],
+            )
 
         logger.info("Setting up virtual environment at {}".format(hub_prefix))
         os.makedirs(hub_prefix, exist_ok=True)
