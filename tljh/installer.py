@@ -25,6 +25,7 @@ from tljh import (
     systemd,
     traefik,
     user,
+    utils,
 )
 from .config import (
     CONFIG_DIR,
@@ -40,6 +41,10 @@ HERE = os.path.abspath(os.path.dirname(__file__))
 
 logger = logging.getLogger("tljh")
 
+DISTRO = utils.get_os_release_variable("ID")
+DISTRO_VERSION = version = float(utils.get_os_release_variable("VERSION_ID"))
+UBUNTU = "ubuntu"
+CENTOS = "centos"
 
 def remove_chp():
     """
@@ -115,8 +120,24 @@ def ensure_jupyterhub_package(prefix):
     # Install pycurl. JupyterHub prefers pycurl over SimpleHTTPClient automatically
     # pycurl is generally more bugfree - see https://github.com/jupyterhub/the-littlest-jupyterhub/issues/289
     # build-essential is also generally useful to everyone involved, and required for pycurl
-    apt.install_packages(["libssl-dev", "libcurl4-openssl-dev", "build-essential"])
-    conda.ensure_pip_packages(prefix, ["pycurl==7.*"], upgrade=True)
+
+    if DISTRO == UBUNTU:
+        apt.install_packages(["libssl-dev", "libcurl4-openssl-dev", "build-essential"])
+        conda.ensure_pip_packages(prefix, ["pycurl==7.*"], upgrade=True)
+
+    elif DISTRO == CENTOS:
+        utils.run_subprocess(["yum", "install", "-y python-pycurl"])
+
+        # sudo
+        # yum
+        # group
+        # install
+        # "Development Tools" - y
+        #
+        # sudo
+        # yum
+        # install
+        # libcurl - devel
 
     conda.ensure_pip_packages(
         prefix,
@@ -194,7 +215,7 @@ def ensure_user_environment(user_requirements_txt_file):
             v=mambaforge_new_version, arch=os.uname().machine
         )
         with conda.download_miniconda_installer(
-            installer_url, installer_sha256
+                installer_url, installer_sha256
         ) as installer_path:
             conda.install_miniconda(installer_path, USER_ENV_PREFIX)
         conda_version = "4.10.3"
@@ -345,7 +366,11 @@ def run_plugin_actions(plugin_manager):
     """
     hook = plugin_manager.hook
     # Install apt packages
-    apt_packages = list(set(itertools.chain(*hook.tljh_extra_apt_packages())))
+    if DISTRO == UBUNTU:
+        apt_packages = list(set(itertools.chain(*hook.tljh_extra_apt_packages())))
+    else:
+        apt_packages = None
+
     if apt_packages:
         logger.info(
             "Installing {} apt packages collected from plugins: {}".format(
@@ -447,7 +472,7 @@ def main():
     ensure_admins(args.admin)
     ensure_usergroups()
     if args.user_requirements_txt_url:
-         logger.info("installing packages from user_requirements_txt_url")
+        logger.info("installing packages from user_requirements_txt_url")
     ensure_user_environment(args.user_requirements_txt_url)
 
     logger.info("Setting up JupyterHub...")

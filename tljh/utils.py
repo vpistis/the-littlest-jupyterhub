@@ -59,3 +59,24 @@ def get_plugin_manager():
     pm.load_setuptools_entrypoints("tljh")
 
     return pm
+
+
+def get_os_release_variable(key):
+    """
+    Return value for key from /etc/os-release
+
+    /etc/os-release is a bash file, so should use bash to parse it.
+
+    Returns empty string if key is not found.
+    """
+    return (
+        subprocess.check_output(
+            [
+                "/bin/bash",
+                "-c",
+                "source /etc/os-release && echo ${{{key}}}".format(key=key),
+            ]
+        )
+            .decode()
+            .strip()
+    )

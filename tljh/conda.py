@@ -138,7 +138,7 @@ def ensure_pip_packages(prefix, packages, upgrade=False):
     Ensure pip packages are installed in the given conda prefix.
     """
     abspath = os.path.abspath(prefix)
-    pip_executable = [os.path.join(abspath, "bin", "python"), "-m", "pip"]
+    pip_executable = [os.path.join(abspath, "bin", "python3"), "-m", "pip3"]
     pip_cmd = pip_executable + ["install"]
     if upgrade:
         pip_cmd.append("--upgrade")
